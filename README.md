@@ -1,78 +1,56 @@
-> ⚠️ **Don't click Fork!**
-> 
-> This is a GitHub Template repo. If you want to use this for a plugin, [use this template][new-repo] to make a new repo!
->
-> ![image](https://github.com/goatcorp/SamplePlugin/assets/16760685/d9732094-e1ed-4769-a70b-58ed2b92580c)
+# FieldAchievements - 特殊地图成就追踪
 
-# SamplePlugin
+一个 Dalamud 插件，用于追踪特殊场景探索相关成就的进度。
 
-[![Use This Template badge](https://img.shields.io/badge/Use%20This%20Template-0?logo=github&labelColor=grey)][new-repo]
+## 功能
 
+- 追踪四个特殊地图的探索成就进度：
+  - 蜃景幻界新月岛 南征之章
+  - 蜃景幻界新月岛 北征之章
+  - 南方博兹雅战线
+  - 扎杜诺尔高原
+- 主窗口分 Tab 显示各个地图的成就追踪
+- 悬浮窗显示当前地图的成就进度
+- 相同成就的不同数量目标只追踪最高数量
+- 像素风进度条显示
+- 成就进度自动刷新
 
-Simple example plugin for Dalamud.
+## 命令
 
-This is not designed to be the simplest possible example, but it is also not designed to cover everything you might want to do. For more detailed questions, come ask in [the Discord](https://discord.gg/holdshift).
+- `/fach` - 打开主窗口
+- `/fach config` - 打开设置窗口
 
-## Main Points
+## 项目结构
 
-* Simple functional plugin
-  * Slash command
-  * Main UI
-  * Settings UI
-  * Image loading
-  * Plugin json
-* Simple, slightly-improved plugin configuration handling
-* Project organization
-  * Copies all necessary plugin files to the output directory
-    * Does not copy dependencies that are provided by dalamud
-    * Output directory can be zipped directly and have exactly what is required
-  * Hides data files from visual studio to reduce clutter
-    * Also allows having data files in different paths than VS would usually allow if done in the IDE directly
+```
+FieldAchievements/
+├── Data/
+│   └── MapData.cs                    —— 地图 TerritoryType、成就 ID/名称/描述等静态数据
+├── Models/
+│   └── AchievementProgressInfo.cs    —— 成就进度数据模型（Current/Max/Ratio/IsComplete）
+├── Windows/
+│   ├── MainWindow.cs                 —— 主窗口（Tab 分页显示各地图成就 + 设置 Tab）
+│   ├── FloatingWindow.cs             —— 悬浮窗（当前地图成就进度，可折叠，跟随地图自动开闭）
+│   ├── ConfigWindow.cs               —— 独立设置窗口
+│   └── Style.cs                      —— 窗口样式常量（像素风配色 / 进度条配色 / Push-Pop 计数）
+├── AchievementTracker.cs             —— 成就进度 Hook（ReceiveAchievementProgress + 主动请求）
+├── Plugin.cs                         —— Dalamud 插件生命周期、Framework 轮询刷新、悬浮窗自动开闭
+├── Configuration.cs                  —— 插件配置
+└── FieldAchievements.json            —— Dalamud 插件清单
+```
 
+## 构建
 
-The intention is less that any of this is used directly in other projects, and more to show how similar things can be done.
+1. 打开 `FieldAchievements.sln`
+2. 构建解决方案（Debug 或 Release）
+3. 将生成的 DLL 添加到 Dalamud 的 Dev Plugin Locations
 
-## How To Use
+## 技术参考
 
-### Getting Started
+- 主 UI 设计参考 [Chronicler](https://github.com/anmili2022/Chronicler) 的 Tab 布局和悬浮窗模式
+- 成就进度获取和进度条绘制参考 [TreasureForecast](https://github.com/yimo0908/TreasureForecast) 的 `AchievementTracker` 和像素风进度条
+- 地图 TerritoryType、成就 ID 和成就名称通过 EXDViewer MCP 从游戏数据查询获得
 
-To begin, [clone this template repository][new-repo] to your own GitHub account. This will automatically bring in everything you need to get a jumpstart on development. You do not need to fork this repository unless you intend to contribute modifications to it.
+## 许可证
 
-Be sure to also check out the [Dalamud Developer Docs][dalamud-docs] for helpful information about building your own plugin. The Developer Docs includes helpful information about all sorts of things, including [how to submit][submit] your newly-created plugin to the official repository. Assuming you use this template repository, the provided project build configuration and license are already chosen to make everything a breeze.
-
-[new-repo]: https://github.com/new?template_name=SamplePlugin&template_owner=goatcorp
-[dalamud-docs]: https://dalamud.dev
-[submit]: https://dalamud.dev/plugin-publishing/submission
-
-### Prerequisites
-
-SamplePlugin assumes all the following prerequisites are met:
-
-* XIVLauncher, FINAL FANTASY XIV, and Dalamud have all been installed and the game has been run with Dalamud at least once.
-* XIVLauncher is installed to its default directories and configurations.
-  * If a custom path is required for Dalamud's dev directory, it must be set with the `DALAMUD_HOME` environment variable.
-* A .NET Core 8 SDK has been installed and configured, or is otherwise available. (In most cases, the IDE will take care of this.)
-
-### Building
-
-1. Open up `SamplePlugin.sln` in your C# editor of choice (likely [Visual Studio](https://visualstudio.microsoft.com) or [JetBrains Rider](https://www.jetbrains.com/rider/)).
-2. Build the solution. By default, this will build a `Debug` build, but you can switch to `Release` in your IDE.
-3. The resulting plugin can be found at `SamplePlugin/bin/x64/Debug/SamplePlugin.dll` (or `Release` if appropriate.)
-
-### Activating in-game
-
-1. Launch the game and use `/xlsettings` in chat or `xlsettings` in the Dalamud Console to open up the Dalamud settings.
-    * In here, go to `Experimental`, and add the full path to the `SamplePlugin.dll` to the list of Dev Plugin Locations.
-2. Next, use `/xlplugins` (chat) or `xlplugins` (console) to open up the Plugin Installer.
-    * In here, go to `Dev Tools > Installed Dev Plugins`, and the `SamplePlugin` should be visible. Enable it.
-3. You should now be able to use `/pmycommand` (chat) or `pmycommand` (console)!
-
-Note that you only need to add it to the Dev Plugin Locations once (Step 1); it is preserved afterwards. You can disable, enable, or load your plugin on startup through the Plugin Installer.
-
-### Reconfiguring for your own uses
-
-Replace all references to `SamplePlugin` in all the files and filenames with your desired name, then start building the plugin of your dreams. You'll figure it out 😁
-
-Dalamud will load the JSON file (by default, `SamplePlugin/SamplePlugin.json`) next to your DLL and use it for metadata, including the description for your plugin in the Plugin Installer. Make sure to update this with information relevant to _your_ plugin!
-
-All participation in this repository is governed by our [Code of Conduct](https://dalamud.dev/code-of-conduct). If you used AI tooling at any point, review the [AI Usage Policy](https://dalamud.dev/plugin-publishing/ai-policy) and disclose your level of AI use. Entirely AI-generated submissions will be rejected, and undisclosed AI use may result in a ban.
+AGPL-3.0-or-later
