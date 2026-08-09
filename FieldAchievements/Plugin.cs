@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Game.Command;
@@ -9,6 +9,7 @@ using Dalamud.Plugin.Services;
 using FieldAchievements.Data;
 using FieldAchievements.Models;
 using FieldAchievements.Windows;
+using Dalamud.Game.ClientState.Statuses;
 
 namespace FieldAchievements;
 
@@ -22,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
 
     private const string CommandName = "/fach";
 
@@ -39,7 +41,7 @@ public sealed class Plugin : IDalamudPlugin
     private int nextUninitializedIdx;
     private int uninitializedCount;
     private readonly Queue<int> pendingRefresh = new();
-    private readonly Dictionary<uint, int> achIndexByID = new();
+    private readonly Dictionary<uint, List<int>> achIndicesByID = new();
 
     private const int AchInitRetryInterval = 30;
     private const int AchRefreshDefaultInterval = 300;
@@ -59,7 +61,15 @@ public sealed class Plugin : IDalamudPlugin
             .ToList();
 
         for (var i = 0; i < Achievements.Count; i++)
-            achIndexByID[Achievements[i].AchievementID] = i;
+        {
+            var id = Achievements[i].AchievementID;
+            if (!achIndicesByID.TryGetValue(id, out var list))
+            {
+                list = new List<int>();
+                achIndicesByID[id] = list;
+            }
+            list.Add(i);
+        }
         uninitializedCount = Achievements.Count;
 
         AchievementTracker = new AchievementTracker(GameInteropProvider);
@@ -105,18 +115,23 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnAchievementProgress(uint id, uint current, uint max)
     {
-        if (achIndexByID.TryGetValue(id, out var idx))
+        if (achIndicesByID.TryGetValue(id, out var indices))
         {
-            var entry = Achievements[idx];
-            if (entry.Max == 0 && max > 0)
-                uninitializedCount--;
-            entry.Current = current;
-            entry.Max = max;
+            foreach (var idx in indices)
+            {
+                var entry = Achievements[idx];
+                if (entry.Max == 0 && max > 0)
+                    uninitializedCount--;
+                entry.Current = current;
+                entry.Max = max;
+            }
         }
     }
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        UpdateBuffBasedProgress();
+
         if (pendingRefresh.Count > 0)
         {
             var idx = pendingRefresh.Dequeue();
@@ -164,6 +179,56 @@ public sealed class Plugin : IDalamudPlugin
     /// </summary>
     public TrackedMap? GetCurrentMap()
         => MapData.ResolveMap(ClientState.TerritoryType);
+
+    /// <summary>
+    /// 基于 buff 层数更新特定成就的进度。
+    /// 当玩家在指定地图内时，用 buff 层数代替成就系统获取实时进度。
+    /// </summary>
+    private void UpdateBuffBasedProgress()
+    {
+        var player = ObjectTable.LocalPlayer;
+        if (player == null)
+            return;
+
+        var currentMap = GetCurrentMap();
+        if (!currentMap.HasValue)
+            return;
+
+        var map = currentMap.Value;
+        var statusList = player.StatusList;
+
+        foreach (var (achId, rule) in MapData.BuffProgressRules)
+        {
+            if (Array.IndexOf(rule.ApplicableMaps, map) < 0)
+                continue;
+
+            if (!achIndicesByID.TryGetValue(achId, out var indices))
+                continue;
+
+            var buffSum = 0u;
+            foreach (var status in statusList)
+            {
+                foreach (var buffId in rule.BuffIds)
+                {
+                    if (status.StatusId == buffId)
+                    {
+                        buffSum += status.Param;
+                        break;
+                    }
+                }
+            }
+
+            var current = Math.Min(buffSum, rule.Max);
+            foreach (var idx in indices)
+            {
+                var entry = Achievements[idx];
+                if (entry.Max == 0)
+                    uninitializedCount--;
+                entry.Current = current;
+                entry.Max = rule.Max;
+            }
+        }
+    }
 
     private void OnUiBuilderDraw()
     {

@@ -45,7 +45,7 @@ public sealed class FloatingWindow : Window
         Flags = BuildFlags();
 
         if (ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
-            plugin.ToggleConfigUi();
+            plugin.ToggleMainUi();
 
         if (DrawHeader())
             collapsed = !collapsed;
@@ -75,7 +75,7 @@ public sealed class FloatingWindow : Window
 
         var clicked = ImGui.IsItemClicked(ImGuiMouseButton.Left);
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(collapsed ? "左键展开悬浮窗\n右键打开设置" : "左键折叠悬浮窗\n右键打开设置");
+            ImGui.SetTooltip(collapsed ? "左键展开悬浮窗\n右键打开主界面" : "左键折叠悬浮窗\n右键打开主界面");
         return clicked;
     }
 
