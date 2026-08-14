@@ -24,12 +24,20 @@ public unsafe sealed class AchievementTracker : IDisposable
         hook.Dispose();
     }
 
-    public void Request(uint id)
+    /// <summary>
+    /// 主动请求指定成就的进度。
+    /// 玩家数据未就绪或已有请求在途时返回 false，调用方可稍后重试。
+    /// </summary>
+    public bool Request(uint id)
     {
         var ui = UIState.Instance();
         if (ui->PlayerState.IsLoaded &&
             ui->Achievement.ProgressRequestState != Achievement.AchievementState.Requested)
+        {
             ui->Achievement.RequestAchievementProgress(id);
+            return true;
+        }
+        return false;
     }
 
     private void ReceiveAchievementDetour(Achievement* self, uint id, uint current, uint max)

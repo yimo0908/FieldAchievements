@@ -124,6 +124,17 @@ public sealed class FloatingWindow : Window
 
         if (ach.IsLoaded)
         {
+            if (ach.IsProgressUnknown)
+            {
+                sb.Clear();
+                sb.Append('[');
+                sb.Append('░', barWidth);
+                sb.Append("] ??/");
+                sb.Append(ach.Max);
+                ImGui.TextColored(Style.ColorGray, sb.ToString());
+                return;
+            }
+
             var ratio = ach.Ratio;
             var filled = Math.Clamp((int)Math.Round(ratio * barWidth), 0, barWidth);
             var barColor = ImGui.ColorConvertU32ToFloat4(GetProgressColor(ratio));

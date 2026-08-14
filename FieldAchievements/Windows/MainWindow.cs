@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -111,14 +111,10 @@ public sealed class MainWindow : Window
         ImGui.TextColored(Style.PixelDim, "识别地图:");
         ImGui.SameLine();
         ImGui.TextColored(currentMap.HasValue ? Style.ColorComplete : Style.ColorGray, mapText);
-
-        if (ImGui.SmallButton("导出进度"))
-            ExportProgress();
     }
 
     private void DrawMapAchievements(TrackedMap map)
     {
-        var entries = MapData.MapAchievements[map];
         var progressList = plugin.Achievements
             .Where(a => a.Map == map)
             .ToList();
@@ -180,7 +176,7 @@ public sealed class MainWindow : Window
             ImGuiHelpers.ScaledDummy(1);
             ImGui.Text("  ");
             ImGui.SameLine();
-            DrawPixelProgress(ach.Ratio, ach.Current, ach.Max, cfg.ProgressBarWidth, ach.IsComplete);
+            DrawPixelProgress(ach.Ratio, ach.Current, ach.Max, cfg.ProgressBarWidth, ach.IsComplete, ach.IsProgressUnknown);
         }
         else
         {
@@ -188,9 +184,9 @@ public sealed class MainWindow : Window
         }
     }
 
-    private void DrawPixelProgress(float ratio, uint current, uint max, int barWidth, bool isComplete)
+    private void DrawPixelProgress(float ratio, uint current, uint max, int barWidth, bool isComplete, bool unknown)
     {
-        var filled = Math.Clamp((int)Math.Round(ratio * barWidth), 0, barWidth);
+        var filled = unknown ? 0 : Math.Clamp((int)Math.Round(ratio * barWidth), 0, barWidth);
         var barColor = ImGui.ColorConvertU32ToFloat4(GetProgressColor(ratio));
 
         sb.Clear();
@@ -198,6 +194,15 @@ public sealed class MainWindow : Window
         sb.Append('█', filled);
         sb.Append('░', barWidth - filled);
         sb.Append("] ");
+
+        if (unknown)
+        {
+            sb.Append("??/");
+            sb.Append(max);
+            ImGui.TextColored(Style.ColorGray, sb.ToString());
+            return;
+        }
+
         sb.Append(current);
         sb.Append(" / ");
         sb.Append(max);
@@ -231,13 +236,4 @@ public sealed class MainWindow : Window
         >= 0.25f => Style.ProgressColorMid,
         _        => Style.ProgressColorLow,
     };
-
-    private void ExportProgress()
-    {
-        var lines = plugin.Achievements.Select(a =>
-            $"[{MapData.MapShortNames[a.Map]}] {a.AchievementName}: {(a.IsLoaded ? $"{a.Current}/{a.Max}" : "未加载")}");
-        var text = string.Join("\n", lines);
-        ImGui.SetClipboardText(text);
-        Plugin.Chat.Print("成就进度已导出到剪贴板");
-    }
 }
