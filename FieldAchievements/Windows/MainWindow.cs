@@ -24,6 +24,7 @@ public sealed class MainWindow : Window
         TrackedMap.CrescentNorth,
         TrackedMap.BozjanSouthernFront,
         TrackedMap.Zadnor,
+        TrackedMap.IslandSanctuary,
     ];
 
     public MainWindow(Plugin plugin)
@@ -81,12 +82,12 @@ public sealed class MainWindow : Window
         DrawTopBar();
         ImGui.Separator();
 
-        if (!ImGui.BeginTabBar("##field_ach_tabs"))
+        if (!ImGui.BeginTabBar("##field_ach_tabs", ImGuiTabBarFlags.FittingPolicyScroll))
             return;
 
         foreach (var map in MapOrder)
         {
-            if (ImGui.BeginTabItem(MapData.MapNames[map]))
+            if (ImGui.BeginTabItem(MapData.MapShortNames[map]))
             {
                 DrawMapAchievements(map);
                 ImGui.EndTabItem();

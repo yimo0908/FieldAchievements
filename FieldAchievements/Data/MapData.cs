@@ -11,7 +11,8 @@ public enum TrackedMap
     CrescentSouth,
     CrescentNorth,
     BozjanSouthernFront,
-    Zadnor
+    Zadnor,
+    IslandSanctuary
 }
 
 /// <summary>
@@ -30,6 +31,7 @@ public static class MapData
         [TrackedMap.CrescentNorth] = 1346u,
         [TrackedMap.BozjanSouthernFront] = 920u,
         [TrackedMap.Zadnor] = 975u,
+        [TrackedMap.IslandSanctuary] = 1055u,
     };
 
     /// <summary>
@@ -41,6 +43,7 @@ public static class MapData
         [TrackedMap.CrescentNorth] = "蜃景幻界新月岛 北征之章",
         [TrackedMap.BozjanSouthernFront] = "南方博兹雅战线",
         [TrackedMap.Zadnor] = "扎杜诺尔高原",
+        [TrackedMap.IslandSanctuary] = "无人岛",
     };
 
     /// <summary>
@@ -52,6 +55,7 @@ public static class MapData
         [TrackedMap.CrescentNorth] = "北征之章",
         [TrackedMap.BozjanSouthernFront] = "博兹雅战线",
         [TrackedMap.Zadnor] = "扎杜诺尔",
+        [TrackedMap.IslandSanctuary] = "无人岛",
     };
 
     /// <summary>
@@ -111,6 +115,16 @@ public static class MapData
             2882u,
             2885u,
         ],
+        [TrackedMap.IslandSanctuary] =
+        [
+            3399u,
+            3092u,
+            3095u,
+            3098u,
+            3101u,
+            3255u,
+            3104u,
+        ],
     };
 
     /// <summary>
@@ -142,6 +156,29 @@ public static class MapData
         [4018u] = new([4226u], 24u, [TrackedMap.CrescentSouth, TrackedMap.CrescentNorth]),
         [2882u] = new([2625u, 2626u, 2627u], 30u, [TrackedMap.BozjanSouthernFront, TrackedMap.Zadnor]),
     };
+
+    /// <summary>
+    /// 基于系列成就完成档位换算进度的规则。
+    /// 用于成就系统不提供有效实时进度的成就（如无人岛贸易大师）：
+    /// 进度取已完成档位中的最高档对应值，全部未完成时为 0。
+    /// </summary>
+    public sealed record MilestoneProgressRule(uint[] ChainIds, uint[] Milestones);
+
+    /// <summary>
+    /// 使用完成档位换算进度的成就及其规则。
+    /// </summary>
+    public static readonly Dictionary<uint, MilestoneProgressRule> MilestoneProgressRules = new()
+    {
+        [3255u] = new([3102u, 3103u, 3255u], [10000u, 17000u, 33000u]),
+    };
+
+    /// <summary>
+    /// 档位换算规则涉及的全部成就 ID（含被追踪成就本体）。
+    /// </summary>
+    public static readonly HashSet<uint> MilestoneChainIds = MilestoneProgressRules
+        .Values
+        .SelectMany(rule => rule.ChainIds)
+        .ToHashSet();
 
     /// <summary>
     /// 根据 TerritoryType RowId 解析对应的追踪地图。

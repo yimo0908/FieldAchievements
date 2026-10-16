@@ -42,14 +42,25 @@ public sealed class Plugin : IDalamudPlugin
     private int achRetryCounter;
     private int nextUninitializedIdx;
     private int uninitializedCount;
-    private readonly Queue<int> pendingRefresh = new();
+    private readonly Queue<uint> pendingRefresh = new();
     private readonly Dictionary<uint, List<int>> achIndicesByID = new();
 
-    // 首次加载时需主动向成就系统请求进度的 buff 追踪成就
-    private readonly uint[] buffProgressRequestQueue = MapData.BuffProgressRules.Keys.ToArray();
-    private int buffProgressRequestIdx;
+    // 首次加载时需主动向成就系统请求进度的特殊进度成就（buff 追踪与档位换算）
+    private readonly uint[] specialProgressRequestQueue = MapData.BuffProgressRules.Keys
+        .Concat(MapData.MilestoneChainIds)
+        .Distinct()
+        .ToArray();
+    private int specialProgressRequestIdx;
 
-    private const int AchInitRetryInterval = 30;
+    // 档位换算规则中未参与追踪的成就 ID，随周期刷新一并请求
+    private readonly uint[] milestoneAuxIds = MapData.MilestoneChainIds
+        .Where(id => !MapData.AllAchievementIds.Contains(id))
+        .ToArray();
+
+    // 已确认完成的档位成就 ID
+    private readonly HashSet<uint> milestoneCompleted = new();
+
+    private const int AchInitRetryInterval = 5;
     private const int AchRefreshDefaultInterval = 300;
 
     public Plugin()
@@ -78,13 +89,18 @@ public sealed class Plugin : IDalamudPlugin
             }
             list.Add(i);
         }
-        // buff 追踪成就：上限已知，初始进度视为未知（未确认完成）
+        // 特殊进度成就：上限已知；buff 追踪成就初始进度视为未知（未确认完成）
         foreach (var entry in Achievements)
         {
             if (MapData.BuffProgressRules.TryGetValue(entry.AchievementID, out var rule))
             {
                 entry.Max = rule.Max;
                 entry.IsProgressUnknown = true;
+            }
+            else if (MapData.MilestoneProgressRules.TryGetValue(entry.AchievementID, out var milestoneRule))
+            {
+                // 档位换算成就：上限为最后档位，初始进度取保守下限
+                entry.Max = milestoneRule.Milestones[^1];
             }
         }
         uninitializedCount = Achievements.Count(a => a.Max == 0);
@@ -147,6 +163,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnAchievementProgress(uint id, uint current, uint max)
     {
+        // 档位换算成就：进度由已完成档位决定，回调仅用于确认档位完成
+        if (MapData.MilestoneChainIds.Contains(id))
+        {
+            if (max > 0 && current >= max)
+                milestoneCompleted.Add(id);
+            return;
+        }
+
         if (!achIndicesByID.TryGetValue(id, out var indices))
             return;
 
@@ -177,13 +201,13 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        UpdateBuffProgressRequest();
+        UpdateSpecialProgressRequest();
         UpdateBuffBasedProgress();
+        UpdateMilestoneBasedProgress();
 
         if (pendingRefresh.Count > 0)
         {
-            var idx = pendingRefresh.Dequeue();
-            AchievementTracker.Request(Achievements[idx].AchievementID);
+            AchievementTracker.Request(pendingRefresh.Dequeue());
             return;
         }
 
@@ -202,10 +226,12 @@ public sealed class Plugin : IDalamudPlugin
                     // buff 追踪成就由场景状态实时驱动，无需向成就系统请求
                     if (MapData.BuffProgressRules.ContainsKey(Achievements[i].AchievementID))
                         continue;
-                    pendingRefresh.Enqueue(i);
+                    pendingRefresh.Enqueue(Achievements[i].AchievementID);
                 }
-                var idx = pendingRefresh.Dequeue();
-                AchievementTracker.Request(Achievements[idx].AchievementID);
+                // 档位换算规则中的前置成就也一并刷新，以便及时确认新达成的档位
+                foreach (var id in milestoneAuxIds)
+                    pendingRefresh.Enqueue(id);
+                AchievementTracker.Request(pendingRefresh.Dequeue());
             }
         }
         else
@@ -234,17 +260,17 @@ public sealed class Plugin : IDalamudPlugin
         => MapData.ResolveMap(ClientState.TerritoryType);
 
     /// <summary>
-    /// 首次加载插件时主动向成就系统请求 buff 追踪成就的进度，用于确认完成状态。
-    /// 玩家数据未就绪或请求在途时逐帧重试，直至全部请求完成。
+    /// 首次加载插件时主动向成就系统请求特殊进度成就（buff 追踪与档位换算）的进度，
+    /// 用于确认已有完成状态。玩家数据未就绪或请求在途时逐帧重试，直至全部请求完成。
     /// </summary>
-    private void UpdateBuffProgressRequest()
+    private void UpdateSpecialProgressRequest()
     {
-        if (buffProgressRequestIdx >= buffProgressRequestQueue.Length)
+        if (specialProgressRequestIdx >= specialProgressRequestQueue.Length)
             return;
 
-        var id = buffProgressRequestQueue[buffProgressRequestIdx];
+        var id = specialProgressRequestQueue[specialProgressRequestIdx];
         if (AchievementTracker.Request(id))
-            buffProgressRequestIdx++;
+            specialProgressRequestIdx++;
     }
 
     /// <summary>
@@ -310,6 +336,35 @@ public sealed class Plugin : IDalamudPlugin
                     // 适用地图外且未完成：进度未知
                     entry.IsProgressUnknown = true;
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 更新基于完成档位换算的成就进度。
+    /// 进度取已完成档位中的最高档对应值，全部未完成时为 0；
+    /// 不采用成就系统返回的原始进度，回调仅用于确认档位完成。
+    /// </summary>
+    private void UpdateMilestoneBasedProgress()
+    {
+        foreach (var (achId, rule) in MapData.MilestoneProgressRules)
+        {
+            if (!achIndicesByID.TryGetValue(achId, out var indices))
+                continue;
+
+            var current = 0u;
+            for (var i = 0; i < rule.ChainIds.Length; i++)
+            {
+                if (milestoneCompleted.Contains(rule.ChainIds[i]))
+                    current = rule.Milestones[i];
+            }
+
+            foreach (var idx in indices)
+            {
+                var entry = Achievements[idx];
+                entry.Max = rule.Milestones[^1];
+                entry.Current = current;
+                entry.IsProgressUnknown = false;
             }
         }
     }
